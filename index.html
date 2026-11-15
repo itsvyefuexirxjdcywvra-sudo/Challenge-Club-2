@@ -163,6 +163,10 @@ nav button{padding:9px 11px;font-size:12px}
    <div class="game-icon">🎨</div><h3>چالش رنگ</h3>
    <p>رنگ نوشته رو تشخیص بده.</p><span class="tag">تمرکز</span>
   </div>
+  <div class="game-card" onclick="startGame('sequence')">
+   <div class="game-icon">🧮</div><h3>دنباله اعداد</h3>
+   <p>عدد بعدی دنباله رو پیدا کن.</p><span class="tag">منطق و الگو</span>
+  </div>
  </div>
 
  <div class="mission">
@@ -280,8 +284,43 @@ function updateUI(){
  document.getElementById("profilePlayed").textContent=data.played;
  document.getElementById("profileWins").textContent=data.wins;
  document.getElementById("missionProgress").style.width=Math.min(data.daily/3*100,100)+"%";
- document.getElementById("missionText").textContent=data.daily+" از ۳ بازی";
+ document.getElementById("missionText").textContent=Math.min(data.daily,3)+" از ۳ بازی";
 }
+
+/* ============================================================
+   🎵 AudioFX — صدای واقعی با Web Audio API (بدون فایل خارجی)
+   ============================================================ */
+const AudioFX = (()=>{
+ let ctx=null;
+ function getCtx(){
+  if(ctx)return ctx;
+  try{ctx=new (window.AudioContext||window.webkitAudioContext)();}
+  catch(e){ctx=null;}
+  return ctx;
+ }
+ function tone({freq=440,dur=0.12,type="sine",gain=0.07,slide=0}={}){
+  if(!data||!data.sound)return;
+  const ac=getCtx();
+  if(!ac)return;
+  if(ac.state==="suspended")ac.resume().catch(()=>{});
+  const osc=ac.createOscillator();
+  const g=ac.createGain();
+  osc.type=type;
+  osc.frequency.setValueAtTime(freq,ac.currentTime);
+  if(slide)osc.frequency.exponentialRampToValueAtTime(Math.max(40,freq+slide),ac.currentTime+dur);
+  g.gain.setValueAtTime(gain,ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+dur);
+  osc.connect(g);g.connect(ac.destination);
+  osc.start();
+  osc.stop(ac.currentTime+dur+0.02);
+ }
+ return {
+  click(){tone({freq:640,dur:0.06,type:"square",gain:0.035});},
+  win(){tone({freq:523,dur:0.12});setTimeout(()=>tone({freq:784,dur:0.18}),110);},
+  lose(){tone({freq:220,dur:0.22,type:"sawtooth",gain:0.05});},
+  tie(){tone({freq:440,dur:0.1});setTimeout(()=>tone({freq:440,dur:0.1}),140);}
+ };
+})();
 
 function showPage(id,btn){
  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
@@ -308,36 +347,52 @@ function reward(points,win=true){
  save();
 }
 
+/* ============================================================
+   🎮 Game Registry — افزودن بازی جدید فقط یک خط
+   ============================================================ */
+const GAMES = {
+ reaction: { title:"⚡ سرعت واکنش",   init: reactionGame },
+ memory:   { title:"🧠 حافظه تصویری", init: memoryGame },
+ math:     { title:"➗ نبرد ریاضی",   init: mathGame },
+ guess:    { title:"🔢 حدس عدد",      init: guessGame },
+ color:    { title:"🎨 چالش رنگ",     init: colorGame },
+ sequence: { title:"🧮 دنباله اعداد", init: sequenceGame }
+};
+
 function startGame(type){
+ clearTimeout(gameTimer);
+ gameOver=false;
+ AudioFX.click();
  currentGame=type;
  showPage("gamePage");
- const titles={
- reaction:"⚡ سرعت واکنش",
- memory:"🧠 حافظه تصویری",
- math:"➗ نبرد ریاضی",
- guess:"🔢 حدس عدد",
- color:"🎨 چالش رنگ"
- };
- document.getElementById("gameTitle").textContent=titles[type];
+ const g=GAMES[type];
+ if(!g)return;
+ document.getElementById("gameTitle").textContent=g.title;
  document.getElementById("gameResult").textContent="";
  const box=document.getElementById("gameContent");
  box.innerHTML="";
- if(type==="reaction")reactionGame(box);
- if(type==="memory")memoryGame(box);
- if(type==="math")mathGame(box);
- if(type==="guess")guessGame(box);
- if(type==="color")colorGame(box);
+ g.init(box);
 }
 
 let currentGame=null;
 let gameTimer=null;
+let gameOver=false;
 
 function endGame(points,win,message){
+ // قفل پایان بازی — جلوگیری از پاداش تکراری
+ if(gameOver)return;
+ gameOver=true;
  clearTimeout(gameTimer);
  document.getElementById("gameResult").textContent=message;
+ // غیرفعال کردن کنترل‌های بازی تا کلیک مجدد پاداش ندهد
+ document.getElementById("gameContent")
+  .querySelectorAll("button,input")
+  .forEach(el=>{el.disabled=true;});
  if(points>0)reward(points,win);
+ if(win)AudioFX.win();else AudioFX.lose();
 }
 
+/* ---------------- بازی ۱: سرعت واکنش ---------------- */
 function reactionGame(box){
  box.innerHTML=`
  <p>وقتی صفحه سبز شد، سریع کلیک کن!</p>
@@ -370,6 +425,7 @@ function reactionGame(box){
  };
 }
 
+/* ---------------- بازی ۲: حافظه تصویری ---------------- */
 function memoryGame(box){
  const symbols=["🍎","🚀","🎮","🐱","⚽","🌟"];
  const chosen=[...symbols].sort(()=>Math.random()-.5).slice(0,4);
@@ -402,6 +458,7 @@ function memoryGame(box){
  };
 }
 
+/* ---------------- بازی ۳: نبرد ریاضی ---------------- */
 function mathGame(box){
  let a=Math.floor(Math.random()*20)+1;
  let b=Math.floor(Math.random()*20)+1;
@@ -418,6 +475,7 @@ function checkMath(answer){
  else endGame(0,false,"جواب اشتباه بود. جواب صحیح: "+answer);
 }
 
+/* ---------------- بازی ۴: حدس عدد ---------------- */
 function guessGame(box){
  const secret=Math.floor(Math.random()*30)+1;
  let attempts=6;
@@ -443,6 +501,7 @@ function guessGame(box){
  };
 }
 
+/* ---------------- بازی ۵: چالش رنگ ---------------- */
 function colorGame(box){
  const colors=[
   {name:"قرمز",code:"#ff4040"},
@@ -475,6 +534,67 @@ function colorGame(box){
   });
  }
  next();
+}
+
+/* ---------------- بازی ۶ (جدید): دنباله اعداد ---------------- */
+function sequenceGame(box){
+ // چهار الگو: حسابی (+n)، هندسی (×n)، فیبوناچی‌گونه، مربع‌ها
+ const patterns=[
+  () => {
+   const start=Math.floor(Math.random()*9)+1;
+   const step=Math.floor(Math.random()*5)+2;
+   return {
+    seq:[start,start+step,start+2*step,start+3*step,start+4*step],
+    answer:start+5*step,
+    hint:"افزایش ثابت"
+   };
+  },
+  () => {
+   const start=Math.floor(Math.random()*2)+2;   // 2 یا 3
+   const mult=Math.floor(Math.random()*2)+2;    // 2 یا 3
+   return {
+    seq:[start,start*mult,start*mult**2,start*mult**3,start*mult**4],
+    answer:start*mult**5,
+    hint:"ضرب ثابت"
+   };
+  },
+  () => {
+   const a=Math.floor(Math.random()*5)+1;
+   const b=Math.floor(Math.random()*5)+1;
+   return {
+    seq:[a,b,a+b,a+2*b,2*a+3*b],
+    answer:3*a+5*b,
+    hint:"جمع دو عدد قبلی"
+   };
+  },
+  () => {
+   const start=Math.floor(Math.random()*3)+1;   // 1..3
+   return {
+    seq:[start**2,(start+1)**2,(start+2)**2,(start+3)**2,(start+4)**2],
+    answer:(start+5)**2,
+    hint:"مربع اعداد"
+   };
+  }
+ ];
+ const p=patterns[Math.floor(Math.random()*patterns.length)]();
+ box.innerHTML=`
+  <p>عدد بعدی دنباله را پیدا کن:</p>
+  <h2 style="font-size:30px;letter-spacing:3px;line-height:1.7">
+   ${p.seq.join(" , ")} , <span style="color:var(--purple)">؟</span>
+  </h2>
+  <input id="seqAnswer" type="number" placeholder="عدد بعدی را وارد کن">
+  <button class="primary" style="margin-top:12px" onclick="checkSequence(${p.answer})">بررسی جواب</button>
+  <p style="color:var(--muted);font-size:13px;margin-top:15px">راهنما: ${p.hint}</p>`;
+}
+
+function checkSequence(answer){
+ const input=document.getElementById("seqAnswer");
+ const raw=(input.value||"").trim();
+ if(raw==="")return alert("یک عدد وارد کن.");
+ const v=Number(raw);
+ if(!Number.isFinite(v))return alert("یک عدد معتبر وارد کن.");
+ if(v===answer)endGame(30,true,"آفرین! جواب درست بود: "+answer);
+ else endGame(0,false,"جواب اشتباه بود. جواب صحیح: "+answer);
 }
 
 function saveName(){
@@ -528,18 +648,24 @@ function buyItem(id){
  const item=shopItems.find(x=>x.id===id);
  if(!item)return;
  if(data.owned.includes(id)){
-  data.avatar=item.icon;save();renderShop();return;
+  data.avatar=item.icon;save();renderShop();
+  AudioFX.click();
+  return;
  }
  if(data.coins<item.price)return alert("سکه کافی نداری!");
  data.coins-=item.price;
  data.owned.push(id);
  data.avatar=item.icon;
  save();renderShop();
+ AudioFX.win();
  alert("خرید با موفقیت انجام شد!");
 }
 
 function toggleSound(){
- data.sound=!data.sound;save();
+ if(data.sound)AudioFX.click();
+ data.sound=!data.sound;
+ save();
+ if(data.sound)AudioFX.click();
  alert(data.sound?"صدا روشن شد.":"صدا خاموش شد.");
 }
 
@@ -580,6 +706,7 @@ function createRoom(){
  roomCode=makeRoomCode();
  roomStatus("در حال ساخت اتاق...");
  document.getElementById("roomCodeDisplay").textContent="";
+ document.getElementById("leaveRoomBtn").classList.remove("hidden");
  const peerId="challengeclub-"+roomCode;
  peer=new Peer(peerId,{debug:0});
 
@@ -619,6 +746,7 @@ function joinRoom(){
  isHost=false;
  roomCode=code;
  roomStatus("در حال اتصال به اتاق...");
+ document.getElementById("leaveRoomBtn").classList.remove("hidden");
  peer=new Peer(undefined,{debug:0});
 
  peer.on("open",()=>{
@@ -703,6 +831,7 @@ function sendMove(move){
  if(!["rock","paper","scissors"].includes(move))return;
 
  myMove=move;
+ AudioFX.click();
  document.getElementById("roundResult").textContent="انتخاب تو ثبت شد؛ منتظر حریف...";
  conn.send({type:"move",move});
  evaluateOnlineRound();
@@ -715,6 +844,8 @@ function evaluateOnlineRound(){
  let result="";
  if(myMove===opponentMove){
   result="مساوی شدید! 🤝";
+  reward(5,false);
+  AudioFX.tie();
  }else if(
   (myMove==="rock"&&opponentMove==="scissors")||
   (myMove==="paper"&&opponentMove==="rock")||
@@ -723,9 +854,12 @@ function evaluateOnlineRound(){
   result="تو برنده شدی! 🎉";
   myOnlineScore++;
   reward(20,true);
+  AudioFX.win();
  }else{
   result="حریفت برنده شد! 😅";
   opponentOnlineScore++;
+  reward(5,false);
+  AudioFX.lose();
  }
 
  document.getElementById("roundResult").textContent=result;
@@ -798,11 +932,18 @@ function cleanupRoom(resetUI=true){
  myMove=null;
  opponentMove=null;
  roundLocked=false;
+ myOnlineScore=0;
+ opponentOnlineScore=0;
+ opponentDisplayName="حریف";
+
  if(resetUI){
   document.getElementById("roomCodeDisplay").textContent="";
   document.getElementById("copyRoomBtn").classList.add("hidden");
   document.getElementById("leaveRoomBtn").classList.add("hidden");
   document.getElementById("onlineGame").classList.add("hidden");
+  document.getElementById("roundResult").textContent="انتخابت رو انجام بده!";
+  document.getElementById("onlineScore").textContent="امتیاز تو: ۰ | حریف: ۰";
+  document.getElementById("opponentName").textContent="منتظر حریف...";
  }
 }
 
