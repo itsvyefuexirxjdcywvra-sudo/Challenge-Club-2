@@ -18,7 +18,7 @@ body{
 margin:0;background:var(--bg);color:var(--text);
 font-family:'Vazirmatn',sans-serif;min-height:100vh;
 }
-button,input{font-family:inherit}
+button,input,select{font-family:inherit}
 button{cursor:pointer;border:0}
 header{
 height:70px;padding:0 5%;display:flex;align-items:center;
@@ -110,6 +110,57 @@ footer{text-align:center;color:var(--muted);padding:30px}
 nav{gap:6px}
 nav button{padding:9px 11px;font-size:12px}
 }
+
+/* --- Chat --- */
+#chatMessages{
+height:220px;overflow-y:auto;background:#10101d;border-radius:10px;
+padding:10px;margin-bottom:10px;text-align:right;
+display:flex;flex-direction:column;align-items:flex-start;
+}
+.chat-bubble{
+max-width:75%;padding:8px 12px;border-radius:12px;margin-bottom:6px;
+font-size:13px;line-height:1.5;word-wrap:break-word;
+animation:bubbleIn .2s ease-out;
+}
+.chat-bubble.mine{
+background:linear-gradient(120deg,var(--purple),var(--pink));
+color:white;
+}
+.chat-bubble.theirs{
+background:var(--panel2);border:1px solid var(--border);
+align-self:flex-end;
+}
+@keyframes bubbleIn{
+from{opacity:0;transform:translateY(5px)}
+to{opacity:1;transform:translateY(0)}
+}
+
+/* --- Toast --- */
+#toastContainer{
+position:fixed;top:80px;left:50%;transform:translateX(-50%);
+z-index:100;display:flex;flex-direction:column;gap:8px;
+pointer-events:none;align-items:center;
+}
+.toast{
+background:#1f1d35;border:1px solid var(--border);color:white;
+padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;
+box-shadow:0 4px 20px rgba(0,0,0,.4);max-width:90vw;
+animation:toastIn .25s ease-out;pointer-events:auto;
+}
+.toast.info{border-color:var(--cyan)}
+.toast.warn{border-color:#ff9b3b}
+.toast.success{border-color:var(--green)}
+@keyframes toastIn{
+from{opacity:0;transform:translateY(-10px)}
+to{opacity:1;transform:translateY(0)}
+}
+
+/* --- Game select --- */
+#gameSelect{
+background:#10101d;color:white;border:1px solid var(--border);
+padding:9px 12px;border-radius:10px;font-weight:700;outline:none;
+}
+#gameSelect:focus{border-color:var(--purple)}
 </style>
 </head>
 <body>
@@ -197,19 +248,60 @@ nav button{padding:9px 11px;font-size:12px}
   <div id="roomStatus" class="room-status">هنوز وارد اتاقی نشدی.</div>
   <div id="roomCodeDisplay" class="room-code"></div>
   <button id="copyRoomBtn" class="secondary hidden" onclick="copyRoomCode()">📋 کپی کد اتاق</button>
-  <div id="onlineGame" class="hidden">
-   <h2>✊ سنگ، کاغذ، قیچی</h2>
-   <p id="opponentName">منتظر حریف...</p>
-   <div id="roundResult" class="game-result">انتخابت رو انجام بده!</div>
-   <div class="game-buttons">
-    <button class="choice" onclick="sendMove('rock')">✊</button>
-    <button class="choice" onclick="sendMove('paper')">✋</button>
-    <button class="choice" onclick="sendMove('scissors')">✌️</button>
-   </div>
-   <p id="onlineScore">امتیاز تو: ۰ | حریف: ۰</p>
-   <button class="secondary" onclick="resetOnlineRound()">دور بعدی</button>
+
+  <div id="hostGameSelect" class="hidden" style="margin-bottom:15px;text-align:right;padding:12px;background:#1a1a2e;border-radius:10px">
+   <label style="color:var(--muted);font-size:13px;display:block;margin-bottom:6px">🎮 انتخاب بازی (فقط میزبان):</label>
+   <select id="gameSelect" onchange="hostSelectGame(this.value)">
+    <option value="rps">✊ سنگ، کاغذ، قیچی</option>
+    <option value="math">➗ ریاضی سریع</option>
+   </select>
   </div>
+
+  <div id="onlineGame" class="hidden">
+   <p id="opponentName" style="color:var(--cyan);font-weight:700">منتظر حریف...</p>
+   <p id="onlineScore" style="color:var(--muted);font-size:13px">امتیاز تو: ۰ | حریف: ۰</p>
+
+   <div id="onlineRps">
+    <h2>✊ سنگ، کاغذ، قیچی</h2>
+    <div id="roundResult" class="game-result">انتخابت رو انجام بده!</div>
+    <div class="game-buttons">
+     <button class="choice" onclick="sendMove('rock')">✊</button>
+     <button class="choice" onclick="sendMove('paper')">✋</button>
+     <button class="choice" onclick="sendMove('scissors')">✌️</button>
+    </div>
+    <button class="secondary" style="margin-top:10px" onclick="resetOnlineRound()">دور بعدی</button>
+   </div>
+
+   <div id="onlineMath" class="hidden">
+    <h2>➗ ریاضی سریع</h2>
+    <div id="mathQuestion" style="font-size:36px;margin:20px 0;font-weight:800">-</div>
+    <input id="mathOnlineAnswer" type="number" placeholder="جواب..." style="max-width:200px;margin:auto;display:block" disabled>
+    <button id="mathSubmitBtn" class="primary" style="margin-top:10px" onclick="submitOnlineMath()" disabled>ارسال</button>
+    <div id="mathOnlineResult" class="game-result" style="min-height:30px"></div>
+    <button class="secondary" onclick="newMathRound()">دور جدید</button>
+   </div>
+
+   <div style="margin-top:15px">
+    <button class="secondary" onclick="requestRematch()">🔄 درخواست بازی مجدد</button>
+   </div>
+
+   <div id="rematchPrompt" class="hidden" style="background:#2d2444;padding:15px;border-radius:12px;margin-top:15px">
+    <p id="rematchPromptText" style="margin:0 0 10px"></p>
+    <button class="primary" onclick="acceptRematch()">✅ قبول</button>
+    <button class="secondary" onclick="declineRematch()">❌ رد</button>
+   </div>
+  </div>
+
   <button id="leaveRoomBtn" class="secondary hidden" onclick="leaveRoom()">خروج از اتاق</button>
+ </div>
+
+ <div id="chatPanel" class="panel hidden" style="margin-top:18px;text-align:right">
+  <h3 style="margin-top:0">💬 چت اتاق</h3>
+  <div id="chatMessages"></div>
+  <div style="display:flex;gap:8px">
+   <input id="chatInput" maxlength="200" placeholder="پیامت..." onkeydown="if(event.key==='Enter')sendChat()">
+   <button class="primary" onclick="sendChat()">ارسال</button>
+  </div>
  </div>
 </section>
 
@@ -253,6 +345,7 @@ nav button{padding:9px 11px;font-size:12px}
  <button class="secondary" style="margin-top:20px" onclick="resetData()">بازنشانی اطلاعات</button>
 </section>
 </main>
+<div id="toastContainer"></div>
 <footer>Challenge Club © 2026 | بازی کن، پیشرفت کن! 🎮</footer>
 <script>
 const defaultData={
@@ -288,7 +381,7 @@ function updateUI(){
 }
 
 /* ============================================================
-   🎵 AudioFX — صدای واقعی با Web Audio API (بدون فایل خارجی)
+   🎵 AudioFX
    ============================================================ */
 const AudioFX = (()=>{
  let ctx=null;
@@ -348,7 +441,7 @@ function reward(points,win=true){
 }
 
 /* ============================================================
-   🎮 Game Registry — افزودن بازی جدید فقط یک خط
+   🎮 Game Registry
    ============================================================ */
 const GAMES = {
  reaction: { title:"⚡ سرعت واکنش",   init: reactionGame },
@@ -379,12 +472,10 @@ let gameTimer=null;
 let gameOver=false;
 
 function endGame(points,win,message){
- // قفل پایان بازی — جلوگیری از پاداش تکراری
  if(gameOver)return;
  gameOver=true;
  clearTimeout(gameTimer);
  document.getElementById("gameResult").textContent=message;
- // غیرفعال کردن کنترل‌های بازی تا کلیک مجدد پاداش ندهد
  document.getElementById("gameContent")
   .querySelectorAll("button,input")
   .forEach(el=>{el.disabled=true;});
@@ -536,9 +627,8 @@ function colorGame(box){
  next();
 }
 
-/* ---------------- بازی ۶ (جدید): دنباله اعداد ---------------- */
+/* ---------------- بازی ۶: دنباله اعداد ---------------- */
 function sequenceGame(box){
- // چهار الگو: حسابی (+n)، هندسی (×n)، فیبوناچی‌گونه، مربع‌ها
  const patterns=[
   () => {
    const start=Math.floor(Math.random()*9)+1;
@@ -550,8 +640,8 @@ function sequenceGame(box){
    };
   },
   () => {
-   const start=Math.floor(Math.random()*2)+2;   // 2 یا 3
-   const mult=Math.floor(Math.random()*2)+2;    // 2 یا 3
+   const start=Math.floor(Math.random()*2)+2;
+   const mult=Math.floor(Math.random()*2)+2;
    return {
     seq:[start,start*mult,start*mult**2,start*mult**3,start*mult**4],
     answer:start*mult**5,
@@ -568,7 +658,7 @@ function sequenceGame(box){
    };
   },
   () => {
-   const start=Math.floor(Math.random()*3)+1;   // 1..3
+   const start=Math.floor(Math.random()*3)+1;
    return {
     seq:[start**2,(start+1)**2,(start+2)**2,(start+3)**2,(start+4)**2],
     answer:(start+5)**2,
@@ -677,6 +767,9 @@ function resetData(){
 updateUI();
 </script>
 <script>
+/* ============================================================
+   🌐 اتاق آنلاین — قابلیت‌های جدید: چت، ریمچ، اعلان، انتخاب بازی
+   ============================================================ */
 let peer=null;
 let conn=null;
 let roomCode="";
@@ -688,6 +781,243 @@ let opponentOnlineScore=0;
 let roundLocked=false;
 let opponentDisplayName="حریف";
 
+// وضعیت جدید
+let currentOnlineGame="rps";       // rps | math
+let duelAnswer=null;               // جواب درست دور ریاضی
+let duelResolved=true;             // آیا دور ریاضی تمام شده؟
+
+/* ---------- Toast ---------- */
+function showToast(text,type="info"){
+ const container=document.getElementById("toastContainer");
+ if(!container)return;
+ const el=document.createElement("div");
+ el.className="toast "+type;
+ el.textContent=String(text).slice(0,200);
+ container.appendChild(el);
+ setTimeout(()=>{
+  el.style.opacity="0";
+  el.style.transition="opacity .3s";
+  setTimeout(()=>el.remove(),300);
+ },3200);
+}
+
+/* ---------- Chat ---------- */
+function appendChat(text,isMine){
+ const box=document.getElementById("chatMessages");
+ if(!box)return;
+ const bubble=document.createElement("div");
+ bubble.className="chat-bubble "+(isMine?"mine":"theirs");
+ bubble.textContent=String(text).slice(0,200);
+ box.appendChild(bubble);
+ box.scrollTop=box.scrollHeight;
+}
+
+function sendChat(){
+ const input=document.getElementById("chatInput");
+ if(!input)return;
+ const text=input.value.trim();
+ if(!text)return;
+ if(!conn||!conn.open){
+  showToast("اتصال برقرار نیست","warn");
+  return;
+ }
+ const safe=text.slice(0,200);
+ conn.send({type:"chat",text:safe});
+ appendChat(safe,true);
+ input.value="";
+ input.focus();
+}
+
+/* ---------- Rematch ---------- */
+function requestRematch(){
+ if(!conn||!conn.open){
+  showToast("اتصال برقرار نیست","warn");
+  return;
+ }
+ conn.send({type:"rematch-request"});
+ showToast("درخواست بازی مجدد ارسال شد","info");
+}
+
+function showRematchPrompt(fromName){
+ const el=document.getElementById("rematchPrompt");
+ if(!el)return;
+ document.getElementById("rematchPromptText").textContent=
+  "🔄 "+(fromName||"حریف")+" می‌خواهد بازی را از نو شروع کنید.";
+ el.classList.remove("hidden");
+}
+
+function hideRematchPrompt(){
+ const el=document.getElementById("rematchPrompt");
+ if(el)el.classList.add("hidden");
+}
+
+function acceptRematch(){
+ if(!conn||!conn.open){
+  showToast("اتصال برقرار نیست","warn");
+  return;
+ }
+ conn.send({type:"rematch-accept"});
+ hideRematchPrompt();
+ resetFullSession();
+ showToast("بازی از نو شروع شد","success");
+}
+
+function declineRematch(){
+ if(!conn||!conn.open)return;
+ conn.send({type:"rematch-decline"});
+ hideRematchPrompt();
+ showToast("درخواست رد شد","info");
+}
+
+function resetFullSession(){
+ myMove=null;
+ opponentMove=null;
+ roundLocked=false;
+ myOnlineScore=0;
+ opponentOnlineScore=0;
+ duelResolved=true;
+ duelAnswer=null;
+
+ updateOnlineScoreDisplay();
+ document.getElementById("roundResult").textContent="انتخابت رو انجام بده!";
+ document.getElementById("mathQuestion").textContent="-";
+ document.getElementById("mathOnlineAnswer").value="";
+ document.getElementById("mathOnlineAnswer").disabled=true;
+ document.getElementById("mathSubmitBtn").disabled=true;
+ document.getElementById("mathOnlineResult").textContent="";
+
+ if(currentOnlineGame==="math"&&isHost){
+  startDuelRound();
+ }
+}
+
+function updateOnlineScoreDisplay(){
+ document.getElementById("onlineScore").textContent=
+  "امتیاز تو: "+myOnlineScore+" | حریف: "+opponentOnlineScore;
+}
+
+/* ---------- Game selection ---------- */
+function hostSelectGame(game){
+ if(!isHost||!conn||!conn.open){
+  showToast("فقط میزبان می‌تواند بازی را عوض کند","warn");
+  return;
+ }
+ if(!["rps","math"].includes(game))return;
+ conn.send({type:"select-game",game});
+ switchOnlineGame(game);
+ showToast("بازی انتخاب شد: "+(game==="math"?"ریاضی سریع":"سنگ، کاغذ، قیچی"),"info");
+ if(game==="math"){
+  startDuelRound();
+ }
+}
+
+function switchOnlineGame(game){
+ currentOnlineGame=game;
+ document.getElementById("onlineRps").classList.toggle("hidden",game!=="rps");
+ document.getElementById("onlineMath").classList.toggle("hidden",game!=="math");
+
+ myMove=null;
+ opponentMove=null;
+ roundLocked=false;
+ document.getElementById("roundResult").textContent="انتخابت رو انجام بده!";
+
+ duelResolved=true;
+ duelAnswer=null;
+ document.getElementById("mathQuestion").textContent="-";
+ document.getElementById("mathOnlineAnswer").value="";
+ document.getElementById("mathOnlineAnswer").disabled=true;
+ document.getElementById("mathSubmitBtn").disabled=true;
+ document.getElementById("mathOnlineResult").textContent="";
+
+ myOnlineScore=0;
+ opponentOnlineScore=0;
+ updateOnlineScoreDisplay();
+}
+
+/* ---------- Math duel ---------- */
+function startDuelRound(){
+ if(!isHost||!conn||!conn.open)return;
+ const a=Math.floor(Math.random()*20)+1;
+ const b=Math.floor(Math.random()*20)+1;
+ conn.send({type:"duel-start",a,b});
+ showDuelProblem(a,b);
+}
+
+function showDuelProblem(a,b){
+ duelAnswer=a+b;
+ duelResolved=false;
+ document.getElementById("mathQuestion").textContent=a+" + "+b+" = ؟";
+ const inp=document.getElementById("mathOnlineAnswer");
+ inp.value="";
+ inp.disabled=false;
+ document.getElementById("mathSubmitBtn").disabled=false;
+ document.getElementById("mathOnlineResult").textContent="اولین جواب درست برنده است!";
+ document.getElementById("mathOnlineResult").style.color="";
+ setTimeout(()=>{try{inp.focus()}catch(e){}},50);
+}
+
+function submitOnlineMath(){
+ if(duelResolved)return;
+ const input=document.getElementById("mathOnlineAnswer");
+ const raw=input.value;
+ if(raw===""||!Number.isFinite(Number(raw)))return;
+ const val=Number(raw);
+
+ if(val!==duelAnswer){
+  input.value="";
+  document.getElementById("mathOnlineResult").textContent="اشتباه! دوباره تلاش کن.";
+  AudioFX.lose();
+  return;
+ }
+
+ if(isHost){
+  duelResolved=true;
+  conn.send({type:"duel-result",winner:"host"});
+  handleDuelResult("host");
+ }else{
+  input.disabled=true;
+  document.getElementById("mathSubmitBtn").disabled=true;
+  document.getElementById("mathOnlineResult").textContent="پاسخ ثبت شد؛ منتظر تأیید میزبان...";
+  conn.send({type:"duel-answer",value:val});
+ }
+}
+
+function handleDuelResult(winner){
+ duelResolved=true;
+ const inp=document.getElementById("mathOnlineAnswer");
+ if(inp)inp.disabled=true;
+ const btn=document.getElementById("mathSubmitBtn");
+ if(btn)btn.disabled=true;
+
+ const result=document.getElementById("mathOnlineResult");
+ let iWon=(winner==="host")===isHost;
+ if(iWon){
+  result.textContent="🎉 تو بردی! +20 امتیاز";
+  reward(20,true);
+  AudioFX.win();
+  myOnlineScore++;
+ }else{
+  result.textContent="😅 حریف برنده شد! +5 امتیاز";
+  reward(5,false);
+  AudioFX.lose();
+  opponentOnlineScore++;
+ }
+ updateOnlineScoreDisplay();
+}
+
+function newMathRound(){
+ if(!conn||!conn.open)return;
+ if(isHost){
+  startDuelRound();
+ }else{
+  conn.send({type:"duel-request"});
+  document.getElementById("mathOnlineResult").textContent="درخواست دور جدید ارسال شد...";
+ }
+}
+
+/* ============================================================
+   هسته اتصال (بدون تغییر در منطق قبلی + قابلیت‌های جدید)
+   ============================================================ */
 function roomStatus(message){
  document.getElementById("roomStatus").textContent=message;
 }
@@ -766,12 +1096,13 @@ function setupRoomConnection(){
  conn.on("open",()=>{
   document.getElementById("leaveRoomBtn").classList.remove("hidden");
   document.getElementById("onlineGame").classList.remove("hidden");
+  document.getElementById("chatPanel").classList.remove("hidden");
+  if(isHost){
+   document.getElementById("hostGameSelect").classList.remove("hidden");
+  }
   document.getElementById("copyRoomBtn").classList.add("hidden");
   roomStatus("✅ اتصال برقرار شد!");
-  conn.send({
-   type:"hello",
-   name:data.name
-  });
+  conn.send({type:"hello",name:data.name});
   if(isHost){
    document.getElementById("roomCodeDisplay").textContent=roomCode;
   }
@@ -785,7 +1116,11 @@ function setupRoomConnection(){
  conn.on("close",()=>{
   roomStatus("ارتباط با حریف قطع شد.");
   document.getElementById("onlineGame").classList.add("hidden");
+  document.getElementById("chatPanel").classList.add("hidden");
+  document.getElementById("hostGameSelect").classList.add("hidden");
+  hideRematchPrompt();
   conn=null;
+  showToast("حریف از اتاق خارج شد 😔","warn");
  });
 
  conn.on("error",()=>{
@@ -799,6 +1134,7 @@ function handleRoomMessage(message){
    opponentDisplayName=String(message.name||"حریف").slice(0,20);
    document.getElementById("opponentName").textContent=
     "حریف: "+opponentDisplayName;
+   showToast(opponentDisplayName+" به اتاق پیوست 👋","success");
    if(isHost&&conn&&conn.open){
     conn.send({type:"welcome",name:data.name});
    }
@@ -808,6 +1144,11 @@ function handleRoomMessage(message){
    opponentDisplayName=String(message.name||"حریف").slice(0,20);
    document.getElementById("opponentName").textContent=
     "حریف: "+opponentDisplayName;
+   showToast(opponentDisplayName+" به اتاق پیوست 👋","success");
+   break;
+
+  case "chat":
+   appendChat(String(message.text||""),false);
    break;
 
   case "move":
@@ -818,6 +1159,54 @@ function handleRoomMessage(message){
 
   case "again":
    resetOnlineLocal(false);
+   break;
+
+  case "rematch-request":
+   showRematchPrompt(opponentDisplayName);
+   break;
+
+  case "rematch-accept":
+   hideRematchPrompt();
+   resetFullSession();
+   showToast("حریف قبول کرد! بازی از نو شروع شد","success");
+   break;
+
+  case "rematch-decline":
+   hideRematchPrompt();
+   showToast("حریف درخواست را رد کرد","warn");
+   break;
+
+  case "select-game":
+   if(!["rps","math"].includes(message.game))return;
+   switchOnlineGame(message.game);
+   document.getElementById("gameSelect").value=message.game;
+   showToast("میزبان بازی را تغییر داد","info");
+   break;
+
+  case "duel-start":
+   if(!isHost)showDuelProblem(Number(message.a),Number(message.b));
+   break;
+
+  case "duel-answer":
+   if(isHost&&!duelResolved){
+    if(Number(message.value)===duelAnswer){
+     duelResolved=true;
+     conn.send({type:"duel-result",winner:"guest"});
+     handleDuelResult("guest");
+    }
+   }
+   break;
+
+  case "duel-result":
+   if(!isHost&&!duelResolved){
+    handleDuelResult(message.winner);
+   }
+   break;
+
+  case "duel-request":
+   if(isHost){
+    startDuelRound();
+   }
    break;
  }
 }
@@ -935,21 +1324,38 @@ function cleanupRoom(resetUI=true){
  myOnlineScore=0;
  opponentOnlineScore=0;
  opponentDisplayName="حریف";
+ currentOnlineGame="rps";
+ duelAnswer=null;
+ duelResolved=true;
 
  if(resetUI){
   document.getElementById("roomCodeDisplay").textContent="";
   document.getElementById("copyRoomBtn").classList.add("hidden");
   document.getElementById("leaveRoomBtn").classList.add("hidden");
   document.getElementById("onlineGame").classList.add("hidden");
+  document.getElementById("chatPanel").classList.add("hidden");
+  document.getElementById("hostGameSelect").classList.add("hidden");
   document.getElementById("roundResult").textContent="انتخابت رو انجام بده!";
   document.getElementById("onlineScore").textContent="امتیاز تو: ۰ | حریف: ۰";
   document.getElementById("opponentName").textContent="منتظر حریف...";
+  document.getElementById("chatMessages").innerHTML="";
+  document.getElementById("chatInput").value="";
+  document.getElementById("rematchPrompt").classList.add("hidden");
+  document.getElementById("onlineRps").classList.remove("hidden");
+  document.getElementById("onlineMath").classList.add("hidden");
+  document.getElementById("gameSelect").value="rps";
+  document.getElementById("mathQuestion").textContent="-";
+  document.getElementById("mathOnlineAnswer").value="";
+  document.getElementById("mathOnlineAnswer").disabled=true;
+  document.getElementById("mathSubmitBtn").disabled=true;
+  document.getElementById("mathOnlineResult").textContent="";
  }
 }
 
 function leaveRoom(){
  cleanupRoom();
  roomStatus("از اتاق خارج شدی.");
+ showToast("از اتاق خارج شدی","info");
 }
 
 window.addEventListener("beforeunload",()=>{
